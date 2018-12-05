@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Update zoom on Ubuntu
+# originally inspired by https://gist.github.com/TheWebDevel/2bcd1a0c328a1063bc6b7f4ea6d2f3e4
+# set this script as a root cron task, once per day (or week, or whatever)
+# 
+
+# do not let the script continue if anything fails
+set -e
+
+echo "Checking for zoom updates..."
+
+# check if there is a need for an update by comparing versions
+# NOTE: uses first user found, in case script runs as root
+localver="$(cat /opt/zoom/version.txt)"
+echo "Installed version: ${localver}"
+
+# remote version located in redirect for .deb file as parent directory name
+remoteurl="$(curl -sI -X HEAD 'https://zoom.us/client/latest/zoom_amd64.deb' | grep Location | cut -s -f 2 -d ' ' | tr -d '\n' | tr -d '\r')"
+
+debfilename="$(basename "${remoteurl}")"
+remotever="$(basename "$(dirname "${remoteurl}")")"
+echo "Remote version: ${remotever}"
+
+if [ "${remotever}" == "${localver}" ]; then
+	echo "No update available"
+	exit
+fi
+
+# Build the deb file path
+debfile=`mktemp -d 2>/dev/null || mktemp -d -t 'mytmpdir'`"/${debfilename}"
+
+# Download the latest stable version of zoom and store it in a temporary location
+curl -s "${remoteurl}" > "${debfile}"
+
+# confirm debfile is, in fact, a debfile
+debfileisok="$(file "${debfile}" | grep 'Debian binary package')"
+[ "" != "${debfileisok}" ] || exit 1
+
+# Now, install the newly downloaded package
+sudo dpkg -i "${debfile}"
+
+# remove the tmp dir
+rm -rf "$(dirname "${debfile}")"
+
